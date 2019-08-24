@@ -1,6 +1,23 @@
 # Baseline the latest version of the Ubuntu for the Docker container
 FROM ubuntu:latest
 
+# Enviroment Stuff
+ENV ANT_HOME=/opt/ant
+ENV ARDUINO_VERSION="1.8.9"
+ENV ARDUINO_DIR="/opt/arduino"
+ENV ARDUINO_EXAMPLES="${ARDUINO_DIR}/examples"
+ENV ARDUINO_HARDWARE="${ARDUINO_DIR}/hardware"
+ENV ARDUINO_LIBS="${ARDUINO_DIR}/libraries"
+ENV ARDUINO_TOOLS="${ARDUINO_HARDWARE}/tools"
+ENV ARDUINO_TOOLS_BUILDER="${ARDUINO_DIR}/tools-builder"
+ENV A_FQBN="arduino:avr"
+ENV A_BIN_DIR="/usr/local/bin"
+ENV A_TOOLS_DIR="/opt/tools"
+ENV A_HOME="/root"
+SHELL ["/bin/bash","-c"]
+
+# Working directory
+WORKDIR ${A_HOME}
 # Install all of the needed support tools, helpers, etc...
 RUN apt-get update && apt-get install -y --no-install-recommends -f software-properties-common \
   && add-apt-repository ppa:openjdk-r/ppa \
@@ -30,8 +47,44 @@ RUN apt-get update && apt-get install -y --no-install-recommends -f software-pro
   libxrender1 \
   libxtst6 \
   libxi6 \
+  unzip \
+  openjfx \
   openjdk-8-jre \
   && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# Working directory
+WORKDIR ${A_HOME}
+
+# Get updates and install dependencies
+RUN apt-get update && apt-get install wget tar xz-utils git xvfb -y && apt-get clean && rm -rf /var/lib/apt/list/*
+# https://github.com/SloCompTech/docker-arduino
+# Get and install Arduino IDE
+RUN wget -q https://downloads.arduino.cc/arduino-${ARDUINO_VERSION}-linux64.tar.xz -O arduino.tar.xz && \
+    tar -xf arduino.tar.xz && \
+    rm arduino.tar.xz && \
+    mv arduino-${ARDUINO_VERSION} ${ARDUINO_DIR} && \
+    ln -s ${ARDUINO_DIR}/arduino ${A_BIN_DIR}/arduino && \
+    ln -s ${ARDUINO_DIR}/arduino-builder ${A_BIN_DIR}/arduino-builder && \
+    echo "${ARDUINO_VERSION}" > ${A_ARDUINO_DIR}/version.txt
+
+# Install additional commands & directories
+RUN mkdir ${A_TOOLS_DIR}
+COPY tools/* ${A_TOOLS_DIR}/
+RUN chmod +x ${A_TOOLS_DIR}/* && \
+    ln -s ${A_TOOLS_DIR}/* ${A_BIN_DIR}/ && \
+    mkdir ${A_HOME}/Arduino && \
+    mkdir ${A_HOME}/Arduino/libraries && \
+    mkdir ${A_HOME}/Arduino/hardware && \
+    mkdir ${A_HOME}/Arduino/tools
+
+# Install additional Arduino boards and libraries
+RUN arduino_add_board_url https://adafruit.github.io/arduino-board-index/package_adafruit_index.json,http://arduino.esp8266.com/stable/package_esp8266com_index.json && \
+    arduino_install_board arduino:sam && \
+    arduino_install_board arduino:samd && \
+    arduino_install_board esp8266:esp8266 && \
+    arduino_install_board adafruit:avr && \
+    arduino_install_board adafruit:samd && \
+    arduino --pref "compiler.warning_level=all" --save-prefs 2>&1
 
 # Create a user to use so that we don't run it all as root
 RUN useradd -d /home/builder -ms /bin/bash -G sudo -p builder builder
@@ -40,20 +93,7 @@ RUN useradd -d /home/builder -ms /bin/bash -G sudo -p builder builder
 USER builder
 WORKDIR /home/builder
 
-# Download and Setup Arduino
-WORKDIR opt
-
-RUN wget https://downloads.arduino.cc/arduino-1.8.9-linux64.tar.xz
- RUN unxz ./arduino-1.8.9-linux64.tar.xz 
- RUN tar -xvf arduino-1.8.9-linux64.tar 
- RUN rm -rf arduino-1.8.9-linux64.tar 
- RUN mv ./arduino-1.8.9 ./arduino 
- RUN cd ./arduino 
- RUN ./install.sh
-
-
 # Create a work directory and switch to it
-RUN mkdir MIPSBuild
 WORKDIR MIPSBuild
 
 # Install the Azure IoT SDK for C with the Public Preview
